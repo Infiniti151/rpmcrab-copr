@@ -1,0 +1,213 @@
+name: Trigger COPR Build
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Trigger a COPR build even if the spec already matches the latest upstream tag"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: copr-build
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_REPO: plusky/rpmcrab
+  SPEC: rpmcrab.spec
+  COLOR_INFO: "\e[1;36m"
+  COLOR_SUCCESS: "\e[1;32m"
+  COLOR_WARN: "\e[1;33m"
+  COLOR_RESET: "\e[0m"
+
+jobs:
+  # --- JOB 1: COMPARE SPEC VERSION WITH THE LATEST UPSTREAM TAG ---
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      should_bump: ${{ steps.compare.outputs.should_bump }}
+      should_build: ${{ steps.compare.outputs.should_build }}
+      old_ver: ${{ steps.compare.outputs.old_ver }}
+      new_ver: ${{ steps.compare.outputs.new_ver }}
+      tag: ${{ steps.compare.outputs.tag }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Compare Spec Version with Latest Tag
+        id: compare
+        env:
+          FORCE: ${{ inputs.force }}
+        run: |
+          OLD_VER=$(awk '/^Version:/ {print $2; exit}' "$SPEC")
+          if [ -z "$OLD_VER" ]; then
+            echo "::error::==> [ERROR] Could not read Version from $SPEC"
+            exit 1
+          fi
+
+          # Newest stable vX.Y.Z tag (pre-release tags are ignored)
+          TAG=$(git ls-remote --tags --refs --sort='-v:refname' \
+                  "https://github.com/${UPSTREAM_REPO}.git" 'refs/tags/v*' \
+                | awk '{sub("refs/tags/", "", $2); print $2}' \
+                | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)
+          if [ -z "$TAG" ]; then
+            echo "::error::==> [ERROR] No release tag found in ${UPSTREAM_REPO}"
+            exit 1
+          fi
+          NEW_VER="${TAG#v}"
+
+          echo "Spec version:     $OLD_VER"
+          echo "Latest upstream:  $NEW_VER ($TAG)"
+
+          SHOULD_BUMP=false
+          if [ "$OLD_VER" != "$NEW_VER" ]; then
+            NEWEST=$(printf '%s\n%s\n' "$OLD_VER" "$NEW_VER" | sort -V | tail -n 1)
+            if [ "$NEWEST" = "$NEW_VER" ]; then
+              SHOULD_BUMP=true
+              echo -e "${COLOR_INFO}==> [INFO] Update found: $OLD_VER -> $NEW_VER${COLOR_RESET}"
+            else
+              echo -e "${COLOR_WARN}==> [WARNING] Spec ($OLD_VER) is newer than the latest tag ($NEW_VER). Not downgrading.${COLOR_RESET}"
+            fi
+          else
+            echo -e "${COLOR_SUCCESS}==> [OK] rpmcrab is up to date ($OLD_VER)${COLOR_RESET}"
+          fi
+
+          SHOULD_BUILD="$SHOULD_BUMP"
+          if [ "$FORCE" = "true" ]; then
+            SHOULD_BUILD=true
+            echo -e "${COLOR_WARN}==> [WARNING] Forced run: a COPR build will be triggered.${COLOR_RESET}"
+          fi
+
+          {
+            echo "should_bump=$SHOULD_BUMP"
+            echo "should_build=$SHOULD_BUILD"
+            echo "old_ver=$OLD_VER"
+            echo "new_ver=$NEW_VER"
+            echo "tag=$TAG"
+          } >> "$GITHUB_OUTPUT"
+
+  # --- JOB 2: BUMP SPEC + README, COMMIT, TRIGGER COPR ---
+  build:
+    needs: check-version
+    if: needs.check-version.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      build_id: ${{ steps.trigger.outputs.build_id }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+
+      - name: Bump Version, Changelog and README Badge
+        if: needs.check-version.outputs.should_bump == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.check-version.outputs.tag }}
+          OLD_VER: ${{ needs.check-version.outputs.old_ver }}
+          NEW_VER: ${{ needs.check-version.outputs.new_ver }}
+        run: |
+          echo -e "${COLOR_INFO}==> [INFO] Bumping rpmcrab from $OLD_VER to $NEW_VER...${COLOR_RESET}"
+          sed -i "s/^Version:.*/Version:        $NEW_VER/" "$SPEC"
+
+          python3 scripts/get_changelog.py "$UPSTREAM_REPO" "$TAG" > changelog.txt
+
+          DATE=$(LC_ALL=C date -u +"%a %b %d %Y")
+          AUTHOR="Infiniti151 <43163551+Infiniti151@users.noreply.github.com>"
+          {
+            echo "* $DATE $AUTHOR - $NEW_VER-1"
+            sed 's/%/%%/g' changelog.txt
+            echo ""
+          } > entry.tmp
+
+          if grep -q "^%changelog" "$SPEC"; then
+            sed -i "/^%changelog/r entry.tmp" "$SPEC"
+          else
+            printf '\n%%changelog\n' >> "$SPEC"
+            cat entry.tmp >> "$SPEC"
+          fi
+
+          if grep -q 'img.shields.io/badge/rpmcrab-' README.md; then
+            sed -i -E 's#(img\.shields\.io/badge/rpmcrab-)[0-9][0-9.]*-#\1'"$NEW_VER"'-#' README.md
+          else
+            echo -e "${COLOR_WARN}==> [WARNING] rpmcrab version badge not found in README.md${COLOR_RESET}"
+          fi
+
+          {
+            echo "### 📦 rpmcrab $OLD_VER → $NEW_VER"
+            echo ""
+            echo "**Changelog:**"
+            cat changelog.txt
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          rm -f entry.tmp changelog.txt
+          git --no-pager diff --stat
+
+      - name: Commit and Push Verified Bot Commit
+        if: needs.check-version.outputs.should_bump == 'true'
+        uses: suzuki-shunsuke/commit-action@5eaa5ecce3ffe93d09a85b946dc5136e3713b1b7 # v1.1.0
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          branch: main
+          commit_message: "🤖 Automated version bump to ${{ needs.check-version.outputs.new_ver }} [skip ci]"
+          files: |
+            rpmcrab.spec
+            README.md
+          fail_on_self_push: false
+
+      - name: Trigger COPR Build
+        id: trigger
+        env:
+          COPR_URL: ${{ secrets.COPR_BASE_WEBHOOK_URL }}
+        run: |
+          BASE_URL=$(echo "$COPR_URL" | xargs)
+          FINAL_URL="${BASE_URL%/}/rpmcrab/"
+
+          echo -e "${COLOR_INFO}==> [INFO] Triggering COPR build...${COLOR_RESET}"
+
+          if ! RESPONSE=$(curl -fsS -X POST "$FINAL_URL"); then
+            echo "::error::==> [ERROR] Webhook failed to trigger COPR build."
+            exit 1
+          fi
+
+          BUILD_ID=$(echo "$RESPONSE" | tr -d '[:space:]')
+          if [[ ! "$BUILD_ID" =~ ^[0-9]+$ ]]; then
+            echo "::error::==> [ERROR] Webhook returned an invalid build ID: '$RESPONSE'"
+            exit 1
+          fi
+
+          echo "build_id=$BUILD_ID" >> "$GITHUB_OUTPUT"
+          echo "Build ID: $BUILD_ID"
+          echo -e "${COLOR_SUCCESS}==> [SUCCESS] Triggered COPR build!${COLOR_RESET}"
+          echo "🚀 COPR build triggered: https://copr.fedorainfracloud.org/coprs/build/$BUILD_ID/" >> "$GITHUB_STEP_SUMMARY"
+
+  # --- JOB 3: WATCH THE BUILD AND NOTIFY ON TELEGRAM ---
+  monitor:
+    needs: [check-version, build]
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Checkout Scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: scripts/check_copr_builds.py
+          sparse-checkout-cone-mode: false
+
+      - name: Watch COPR Build & Notify
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          BUILD_ID: ${{ needs.build.outputs.build_id }}
+          APP: rpmcrab
+          OLD_VER: ${{ needs.check-version.outputs.old_ver }}
+          NEW_VER: ${{ needs.check-version.outputs.new_ver }}
+        run: python3 scripts/check_copr_builds.py "$BUILD_ID"

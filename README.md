@@ -1,8 +1,9 @@
 # rpmcrab-copr
+<img src="https://raw.githubusercontent.com/plusky/rpmcrab/main/docs/assets/logo.svg" align="right" width="130" alt="rpmcrab logo">
 
 [![Build](https://img.shields.io/github/actions/workflow/status/Infiniti151/rpmcrab-copr/copr-build.yml?style=for-the-badge&label=build)](https://github.com/Infiniti151/rpmcrab-copr/actions)
 [![COPR Build Status](https://img.shields.io/badge/dynamic/json?url=https://copr.fedorainfracloud.org/api_3/build/list/%3Fownername%3Dinfiniti151%26projectname%3Drpmcrab%26limit%3D1&query=$.items[0].state&label=COPR&style=for-the-badge&logo=fedora&logoColor=white&color=%2351A2DA)](https://copr.fedorainfracloud.org/coprs/infiniti151/rpmcrab/)
-[![rpmcrab version](https://img.shields.io/github/v/tag/plusky/rpmcrab?style=for-the-badge&label=rpmcrab)](https://github.com/plusky/rpmcrab/tags)
+[![rpmcrab version](https://img.shields.io/badge/rpmcrab-0.4.2-orange?style=for-the-badge)](https://copr.fedorainfracloud.org/coprs/infiniti151/rpmcrab/)
 [![Fedora Versions](https://img.shields.io/badge/Fedora-44%20%7C%2045%20%7C%20Rawhide%20%7C%20ELN-3c6eb4?style=for-the-badge&logo=fedora&logoColor=white)](https://fedoraproject.org/)
 ![Arch x86_64](https://img.shields.io/badge/Arch-x86__64-purple?style=for-the-badge)
 [![License](https://img.shields.io/github/license/Infiniti151/rpmcrab-copr?style=for-the-badge&logo=spdx&logoColor=white&color=yellow&label=License)](https://github.com/Infiniti151/rpmcrab-copr/blob/main/LICENSE)
@@ -15,7 +16,7 @@ Upstream's release binaries are built for openSUSE and link against a different
 or a lot of guesswork. This repo builds rpmcrab against each Fedora release's
 own `librpm` and publishes the result in Copr.
 
-**Copr project:** <https://copr.fedorainfracloud.org/coprs/infiniti151/rpmcrab/>
+**Copr project:** <https://copr.fedorainfracloud.org/coprs/infiniti151/rpmcrab>
 
 ## Install
 
@@ -126,3 +127,5 @@ licensed under the [MIT License](LICENSE).
 
 `rpmcrab` itself is licensed separately, under GPL-2.0-or-later. See the
 [upstream repository](https://github.com/plusky/rpmcrab).
+
+The rpmcrab logo at the top is loaded from the upstream repository and is not covered by the license of this repository.
