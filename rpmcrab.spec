@@ -10,8 +10,8 @@ Name:           rpmcrab
 Version:        0.4.2
 Release:        1%{?dist}
 Summary:        Drop-in replacement for rpmlint, rewritten in Rust
-
 License:        GPL-2.0-or-later AND LGPL-2.0-or-later AND MPL-2.0 AND MIT AND Apache-2.0 AND BSD-3-Clause AND BSD-2-Clause AND BSL-1.0 AND bzip2-1.0.6 AND Unicode-3.0 AND Zlib
+BugURL:         https://github.com/Infiniti151/rpmcrab-copr/issues
 
 %forgemeta
 
