@@ -7,7 +7,7 @@
 %global         tag           v%{version}
 
 Name:           rpmcrab
-Version:        0.4.2
+Version:        0.4.4
 Release:        1%{?dist}
 Summary:        Drop-in replacement for rpmlint, rewritten in Rust
 License:        GPL-2.0-or-later AND LGPL-2.0-or-later AND MPL-2.0 AND MIT AND Apache-2.0 AND BSD-3-Clause AND BSD-2-Clause AND BSL-1.0 AND bzip2-1.0.6 AND Unicode-3.0 AND Zlib
@@ -79,6 +79,9 @@ install -Dpm0644 crates/%{name}/completions/%{name}.fish \
 %{_datadir}/fish/vendor_completions.d/%{name}.fish
 
 %changelog
+* Sat Nov 28 2026 Infiniti151 <43163551+Infiniti151@users.noreply.github.com> - 0.4.4-1
+- ci(release): run the release on ubuntu-26.04, rebuild the baseline from source
+
 * Sun Nov 22 2026 Infiniti151 <43163551+Infiniti151@users.noreply.github.com> - 0.4.2-1
 - chore(release): bump to 0.4.2 for post-release development by @plusky in #1470
 - Nit batch: #1462, #1464, #1467, #1468 follow-ups by @scarabeusiv in #1472
